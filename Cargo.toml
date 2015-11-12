@@ -1,0 +1,12 @@
+[package]
+name = "gmagick"
+version = "0.1.0"
+authors = ["Jacob Brown <j.h.brown@tcu.edu>"]
+
+build = "build.rs"
+
+[dependencies]
+libc    = "*"
+
+[build-dependencies.bindgen]
+git = "https://github.com/crabtw/rust-bindgen"

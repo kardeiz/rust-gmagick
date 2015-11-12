@@ -1,0 +1,6 @@
+target
+Cargo.lock
+
+/src/ffi.rs
+/examples/
+/tests/
