@@ -1,10 +1,7 @@
 extern crate bindgen;
+extern crate pkg_config;
 
 fn main() {
-
-  let gm_path = std::env::var("GM_PATH")
-    .ok()
-    .unwrap_or_else(|| "/usr/include/GraphicsMagick".to_string());
 
   let mut builder = bindgen::builder();
 
@@ -13,11 +10,19 @@ fn main() {
     builder.clang_arg(clang_include_dir);
   }
 
+  let pkg = pkg_config::find_library("GraphicsMagick").unwrap();
+
+  for path in pkg.include_paths.iter().filter_map(|p| p.to_str()) {
+    builder.clang_arg("-I");
+    builder.clang_arg(path);
+  }
+
+  for lib in pkg.libs {
+    builder.link(lib);
+  }
+
   let bindings = builder
-    .clang_arg("-I")
-    .clang_arg(gm_path.as_ref())
     .header("src/gen.h")
-    .link("GraphicsMagick")
     .emit_builtins()
     .generate()
     .unwrap();

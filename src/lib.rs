@@ -4,7 +4,7 @@ extern crate libc;
 
 use std::ptr;
 use std::mem;
-use std::ffi::{CString, CStr};
+use std::ffi::CString;
 
 mod ffi;
 
@@ -14,7 +14,6 @@ pub struct Image {
 
 impl Drop for Image {
   fn drop(&mut self) {
-    println!("Dropping Image!");
     if !self.ptr.is_null() { 
       unsafe { ffi::DestroyImage(self.ptr); }
     }
@@ -25,6 +24,14 @@ impl Image {
 
   pub fn new() -> Image {
     Image { ptr: ptr::null_mut() }
+  }
+
+  fn from_ptr(ptr: *mut ffi::Image) -> Option<Image> {
+    if ptr.is_null() { 
+      None
+    } else { 
+      Some(Image { ptr: ptr })
+    }
   }
 
   pub fn from_path(_path: &str) -> Option<Image> {
@@ -41,9 +48,7 @@ impl Image {
       }
       ffi::ReadImage(img_info.ptr, &mut exception.val)
     };
-
-    if ptr.is_null() { None } 
-      else { Some(Image { ptr: ptr }) }
+    Self::from_ptr(ptr)    
   }
 
   pub fn dimensions(&mut self) -> (u64, u64) {
@@ -58,8 +63,7 @@ impl Image {
         h as ::libc::c_ulong,
         &mut exception.val)
     };
-    if ptr.is_null() { None } 
-      else { Some(Image { ptr: ptr }) }
+    Self::from_ptr(ptr)
   }
 
   pub fn rotate(&mut self, degrees: f64) -> Option<Image> {
@@ -69,8 +73,7 @@ impl Image {
         degrees as ::libc::c_double,
         &mut exception.val)
     };
-    if ptr.is_null() { None } 
-      else { Some(Image { ptr: ptr }) }
+    Self::from_ptr(ptr)
   }
 
   pub fn mirror(&mut self) -> Option<Image> {
@@ -78,8 +81,7 @@ impl Image {
     let ptr = unsafe {
       ffi::FlopImage(self.ptr, &mut exception.val)
     };
-    if ptr.is_null() { None } 
-      else { Some(Image { ptr: ptr }) }
+    Self::from_ptr(ptr)
   }
 
   pub fn crop(&mut self,
@@ -101,8 +103,7 @@ impl Image {
       ffi::CropImage(self.ptr, &geometry, &mut exception.val)
     };
 
-    if ptr.is_null() { None } 
-      else { Some(Image { ptr: ptr }) }
+    Self::from_ptr(ptr)
 
   }
 
@@ -156,7 +157,6 @@ pub struct ImageInfo {
 
 impl Drop for ImageInfo {
   fn drop(&mut self) {
-    println!("Dropping ImageInfo!");
     if !self.ptr.is_null() { 
       unsafe { ffi::DestroyImageInfo(self.ptr); }
     }
@@ -180,7 +180,6 @@ pub struct ExceptionInfo {
 
 impl Drop for ExceptionInfo {
   fn drop(&mut self) {
-    println!("Dropping ExceptionInfo!");
     unsafe { ffi::DestroyExceptionInfo(&mut self.val); }
   }
 }
