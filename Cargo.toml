@@ -1,6 +1,6 @@
 [package]
 name = "gmagick"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Jacob Brown <j.h.brown@tcu.edu>"]
 
 build = "build.rs"
