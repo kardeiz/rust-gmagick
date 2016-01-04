@@ -125,7 +125,7 @@ impl Image {
     }
   }
 
-  pub fn resize(&mut self, 
+  pub fn smart_scale(&mut self, 
     _w: Option<u64>,
     _h: Option<u64>) -> Option<Image> {
 
@@ -139,8 +139,11 @@ impl Image {
       .map(|h| (h as f64) / (ch as f64))
       .unwrap_or(1 as f64);
 
-    let ratio = if ratio_w < ratio_h { ratio_w }
-      else { ratio_h };
+    let ratio = if ratio_w < ratio_h { 
+      ratio_w
+    } else { 
+      ratio_h
+    };
 
     let w = ((cw as f64) * ratio).ceil() as u64;
     let h = ((ch as f64) * ratio).ceil() as u64;
