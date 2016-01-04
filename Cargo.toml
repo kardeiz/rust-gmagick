@@ -10,5 +10,5 @@ libc    = "*"
 
 [build-dependencies]
 pkg-config = "*"
-bindgen = { git = "https://github.com/crabtw/rust-bindgen#1b50ffed" }
+bindgen = { git = "https://github.com/crabtw/rust-bindgen", rev = "1b50ffed" }
 
