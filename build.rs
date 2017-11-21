@@ -1,18 +1,10 @@
-extern crate bindgen;
-extern crate pkg_config;
-
 mod inner {
     
     extern crate bindgen;
     extern crate pkg_config;
 
     pub fn main() {
-        let mut builder = bindgen::builder();
-
-        if let Some(clang_include_dir) = bindgen::get_include_dir() {
-            builder.clang_arg("-I");
-            builder.clang_arg(clang_include_dir);
-        }
+        let mut builder = bindgen::Builder::default();
 
         let pkg = pkg_config::probe_library("GraphicsMagick")
             .expect("Could not find GraphicsMagick");
@@ -22,8 +14,8 @@ mod inner {
         for path in pkg.include_paths.iter()
             .filter_map(|p| p.to_str()) {
             
-            builder.clang_arg("-I");
-            builder.clang_arg(path);
+            builder = builder.clang_arg("-I");
+            builder = builder.clang_arg(path);
 
             let api = ::std::path::Path::new(path)
                 .join("magick")
@@ -35,12 +27,13 @@ mod inner {
         }
 
         for lib in pkg.libs {
-            builder.link(lib);
+            builder = builder.link(lib);
         }
 
         let bindings = builder
             .header(header.expect("No header found"))
-            .emit_builtins()
+            // .emit_builtins()
+            .layout_tests(false)
             .generate()
             .unwrap();
 

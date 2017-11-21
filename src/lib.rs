@@ -2,6 +2,11 @@
 
 extern crate libc;
 
+extern crate failure;
+
+#[macro_use]
+extern crate failure_derive;
+
 use std::ptr;
 use std::mem;
 use std::ffi::{CStr, CString};
@@ -9,49 +14,36 @@ use std::ffi::{CStr, CString};
 use std::sync::{Once, ONCE_INIT};
 
 use std::os::raw;
-use std::default::Default;
 
 mod ffi;
 
 pub mod err {
-    use std::{error, fmt, result};
 
-    macro_rules! from {
-        ($t: ty) => {
-            impl ::std::convert::From<$t> for Error {
-                fn from(e: $t) -> Self {
-                    Error::Boxed(e.into())
-                }
-            }
-        }
-    }
-
-    #[derive(Debug)]
+    #[derive(Fail, Debug)]
     pub enum Error {
-        Other,
-        Boxed(Box<error::Error + Send + Sync>)
+        #[fail(display = "{}", _0)]
+        FromUtf8(#[cause] ::std::string::FromUtf8Error),
+        #[fail(display = "{}", _0)]
+        Utf8(#[cause] ::std::str::Utf8Error),
+        #[fail(display = "{}", _0)]
+        Nul(#[cause] ::std::ffi::NulError),
+        #[fail(display = "Something went wrong")]
+        Other
     }
 
-    impl error::Error for Error {
-        fn description(&self) -> &str {
-            match *self {
-                Error::Other => { "Something bad happened" },
-                Error::Boxed(ref e) => { e.description() },
-            }
-        }
+    impl From<::std::string::FromUtf8Error> for Error {
+        fn from(t: ::std::string::FromUtf8Error) -> Self { Error::FromUtf8(t) }
     }
 
-    impl fmt::Display for Error {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            error::Error::description(self).fmt(f)
-        }
+    impl From<::std::str::Utf8Error> for Error {
+        fn from(t: ::std::str::Utf8Error) -> Self { Error::Utf8(t) }
     }
 
-    pub type Result<T> = result::Result<T, Error>;
-    
-    from!(::std::string::FromUtf8Error);
-    from!(::std::str::Utf8Error);
-    from!(::std::ffi::NulError);
+    impl From<::std::ffi::NulError> for Error {
+        fn from(t: ::std::ffi::NulError) -> Self { Error::Nul(t) }
+    }
+
+    pub type Result<T> = ::std::result::Result<T, Error>;
 
 }
 
@@ -59,7 +51,7 @@ fn initialize() {
     static INIT: Once = ONCE_INIT;
     INIT.call_once(|| unsafe {
         ffi::InitializeMagick(ptr::null_mut());
-        assert_eq!(libc::atexit(cleanup), 0);
+        assert_eq!(::libc::atexit(cleanup), 0);
     });
 
     extern fn cleanup() {
@@ -73,7 +65,7 @@ pub struct Worker {
     pub exception: ExceptionInfo
 }
 
-impl Default for Worker {
+impl ::std::default::Default for Worker {
     fn default() -> Self {
         Worker {
             image: Image { ptr: ptr::null_mut() },
@@ -87,7 +79,7 @@ impl Worker {
 
     pub fn new() -> Self {
         initialize();
-        Default::default()
+        Worker::default()
     }
 
     pub fn name(&self) -> err::Result<String> {
@@ -98,7 +90,7 @@ impl Worker {
                 .take_while(|x| *x != 0 ) {
                 vec.push(bt);
             }
-            let out = try!(String::from_utf8(vec));
+            let out = String::from_utf8(vec)?;
             Ok(out)
         }
     }
@@ -106,7 +98,7 @@ impl Worker {
     pub fn mime_type(&self) -> err::Result<String> {
         unsafe {
             let mime = ffi::MagickToMime(&(*self.image.ptr).magick as *const i8);
-            let out = try!(CStr::from_ptr(mime).to_str()).to_owned();
+            let out = CStr::from_ptr(mime).to_str()?.to_owned();
             Ok(out)
         }
     }
@@ -114,7 +106,7 @@ impl Worker {
     pub fn from_path(path: &str) -> err::Result<Self> {
         unsafe {
             let mut worker = Worker::new();
-            let path_c = try!(CString::new(path));
+            let path_c = CString::new(path)?;
             let info = worker.info.clone();
             for (a, &c) in (*info.ptr).filename
                 .iter_mut()
@@ -124,9 +116,9 @@ impl Worker {
 
             let ptr = ffi::ReadImage(info.ptr, &mut worker.exception.val);
 
-            worker.image = try!(Image::from_ptr(ptr));
+            worker.image = Image::from_ptr(ptr)?;
 
-            let _ = try!(worker.cache());
+            let _ = worker.cache()?;
 
             Ok(worker)
         }
@@ -135,8 +127,8 @@ impl Worker {
     pub fn from_cache(path: &str) -> err::Result<Self> {
         unsafe {
             let mut worker = Worker::new();
-            let mut id: i64 = Default::default();
-            let path_c = try!(CString::new(path));
+            let mut id = i64::default();
+            let path_c = CString::new(path)?;
             let info = worker.info.clone();
             for (a, &c) in (*info.ptr).filename
                 .iter_mut()
@@ -148,14 +140,14 @@ impl Worker {
                 &(*info.ptr).filename as *const i8,
                 &mut id,
                 &mut worker.exception.val);
-            worker.image = try!(Image::from_ptr(ptr));
+            worker.image = Image::from_ptr(ptr)?;
             Ok(worker)
         }
     }
 
     pub fn write(&mut self, path: &str) -> err::Result<()> {
         unsafe {
-            let path = try!(CString::new(path));
+            let path = CString::new(path)?;
             let info = self.info.clone();
             
             for (a, &c) in (*self.image.ptr).filename
@@ -175,7 +167,7 @@ impl Worker {
 
     pub fn set_format(&mut self, fmt: &str) -> err::Result<()> {
         unsafe {
-            let fmt_c = try!(CString::new(fmt));
+            let fmt_c = CString::new(fmt)?;
             for (a, &c) in (*self.image.ptr).magick
                 .iter_mut()
                 .zip(fmt_c.as_bytes_with_nul()) {
@@ -196,9 +188,9 @@ impl Worker {
         unsafe {
             let mut exception = self.exception.clone();
             let id = ffi::SetMagickRegistry(
-                ffi::Enum_Unnamed74::ImageRegistryType,
+                ffi::RegistryType::ImageRegistryType,
                 self.image.ptr as *mut _ as *mut raw::c_void,
-                mem::size_of::<ffi::Image>() as u64,
+                mem::size_of::<ffi::Image>(),
                 &mut exception.val);
             if id == -1 {
                 Err(err::Error::Other)
@@ -211,7 +203,7 @@ impl Worker {
     pub fn write_bytes(&self) -> err::Result<Vec<u8>> {
         unsafe {
             let mut exception = self.exception.clone();
-            let mut len: u64 = ::std::default::Default::default();
+            let mut len = usize::default();
             let ptr = ffi::ImageToBlob(
                 self.info.ptr, 
                 self.image.ptr,
@@ -228,8 +220,8 @@ impl Worker {
     }
 
     pub fn get(path: &str) -> err::Result<Self> {
-        let alt = |_| Self::from_path(path);
-        Self::from_cache(path).or_else(alt)
+        Self::from_cache(path)
+            .or_else(|_| Self::from_path(path))
     }
 
     pub fn dimensions(&self) -> (u64, u64) {
@@ -244,7 +236,7 @@ impl Worker {
                 h as raw::c_ulong,
                 &mut self.exception.val)
         };
-        self.image = try!(Image::from_ptr(ptr));
+        self.image = Image::from_ptr(ptr)?;
         Ok(())
     }
 
@@ -255,7 +247,7 @@ impl Worker {
                 degrees as raw::c_double,
                 &mut self.exception.val)
         };
-        self.image = try!(Image::from_ptr(ptr));
+        self.image = Image::from_ptr(ptr)?;
         Ok(())
     }
 
@@ -263,7 +255,7 @@ impl Worker {
         let ptr = unsafe {
             ffi::FlopImage(self.image.ptr, &mut self.exception.val)
         };
-        self.image = try!(Image::from_ptr(ptr));
+        self.image = Image::from_ptr(ptr)?;
         Ok(())
     }
 
@@ -288,7 +280,7 @@ impl Worker {
                 &mut self.exception.val)
         };
 
-        self.image = try!(Image::from_ptr(ptr));
+        self.image = Image::from_ptr(ptr)?;
         Ok(())
     }
 
@@ -385,7 +377,7 @@ impl Drop for ExceptionInfo {
 impl ExceptionInfo {
 
     pub fn new() -> ExceptionInfo {
-        let mut val = Default::default();
+        let mut val: ffi::ExceptionInfo = unsafe { mem::uninitialized() };
         unsafe { ffi::GetExceptionInfo(&mut val); }
         ExceptionInfo { val: val }
     }
